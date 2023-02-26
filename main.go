@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/line/line-bot-sdk-go/linebot"
 	gpt3 "github.com/sashabaranov/go-gpt3"
@@ -81,6 +82,7 @@ func getOpenAIRes(prompt string) (string, error) {
 	// 初始化 OpenAI API客戶端
 	client := gpt3.NewClient(os.Getenv("OPENAI_API_KEY"))
 
+	// 設定 Completoms API 參數
 	req := gpt3.CompletionRequest{
 		Model: gpt3.GPT3TextDavinci003,
 		// 最大輸出內容
@@ -89,12 +91,16 @@ func getOpenAIRes(prompt string) (string, error) {
 		Prompt: prompt,
 	}
 
+	// 執行OpenAPI
 	res, err := client.CreateCompletion(context.TODO(), req)
 	if err != nil {
 		return "", err
 	}
 
-	// 設定 OpenAI GPT-3的參數
-	return res.Choices[0].Text, nil
+	// 取得OpenAI回傳內容，並去除不必要的空格及分行符號
+	result := strings.ReplaceAll(res.Choices[0].Text, "\n", "")
+	result = strings.ReplaceAll(result, " ", "")
+
+	return result, nil
 
 }
