@@ -1,27 +1,26 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 
 	"github.com/line/line-bot-sdk-go/linebot"
+	gpt3 "github.com/sashabaranov/go-gpt3"
 )
 
 var bot *linebot.Client
 
 func main() {
-	var err error
-	bot, err = linebot.New(
-		os.Getenv("CHANNEL_SECRET"),
-		os.Getenv("CHANNEL_ACCESS_TOKEN"),
-	)
+	// 初始化 Line bot
+	bot, err := newLineBot()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	http.HandleFunc("/collback", callbackHandle)
+	http.HandleFunc("/collback", callbackHandle(bot))
 
 	port := os.Getenv("PORT")
 
@@ -29,28 +28,73 @@ func main() {
 	http.ListenAndServe(addr, nil)
 }
 
-func callbackHandle(w http.ResponseWriter, req *http.Request) {
-	events, err := bot.ParseRequest(req)
-	if err != nil {
-		if err == linebot.ErrInvalidSignature {
-			w.WriteHeader(400)
-		} else {
-			w.WriteHeader(500)
-		}
-		return
-	}
-	for _, event := range events {
-		if event.Type == linebot.EventTypeMessage {
-			switch message := event.Message.(type) {
-			case *linebot.TextMessage:
-				replyText := fmt.Sprintf("你說了：%s", message.Text)
-				if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(replyText)).Do(); err != nil {
-					log.Print(err)
-				}
-
+func callbackHandle(bot *linebot.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		// 解析 Line Bot 訊息
+		events, err := bot.ParseRequest(req)
+		if err != nil {
+			if err == linebot.ErrInvalidSignature {
+				w.WriteHeader(http.StatusBadRequest)
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
 			}
+			return
+		}
 
+		// 處理 Line Bot 訊息
+		for _, event := range events {
+			if event.Type == linebot.EventTypeMessage {
+
+				switch message := event.Message.(type) {
+				case *linebot.TextMessage:
+					res, err := getOpenAIRes(message.Text)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					if res != "" {
+						if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(res)).Do(); err != nil {
+							log.Print(err)
+
+						}
+					}
+				}
+			}
 		}
 	}
+}
+func newLineBot() (*linebot.Client, error) {
+	bot, err := linebot.New(
+		os.Getenv("CHANNEL_SECRET"),
+		os.Getenv("CHANNEL_ACCESS_TOKEN"),
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return bot, nil
+
+}
+
+func getOpenAIRes(prompt string) (string, error) {
+	// 初始化 OpenAI API客戶端
+	client := gpt3.NewClient(os.Getenv("OPENAI_API_KEY"))
+
+	req := gpt3.CompletionRequest{
+		Model: gpt3.GPT3TextDavinci003,
+		// 最大輸出內容
+		MaxTokens: 300,
+		// 輸入的文字
+		Prompt: prompt,
+	}
+
+	res, err := client.CreateCompletion(context.TODO(), req)
+	if err != nil {
+		return "", err
+	}
+
+	// 設定 OpenAI GPT-3的參數
+	return res.Choices[0].Text, nil
 
 }
