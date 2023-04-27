@@ -9,7 +9,8 @@ import (
 	"strings"
 
 	"github.com/line/line-bot-sdk-go/linebot"
-	gpt3 "github.com/sashabaranov/go-gpt3"
+	"github.com/sashabaranov/go-openai"
+	gpt3 "github.com/sashabaranov/go-openai"
 )
 
 var bot *linebot.Client
@@ -83,22 +84,26 @@ func getOpenAIRes(prompt string) (string, error) {
 	client := gpt3.NewClient(os.Getenv("OPENAI_API_KEY"))
 
 	// 設定 Completoms API 參數
-	req := gpt3.CompletionRequest{
-		Model: gpt3.GPT3TextDavinci003,
+	req := gpt3.ChatCompletionRequest{
+		Model: gpt3.GPT3Dot5Turbo,
 		// 最大輸出內容
 		MaxTokens: 300,
 		// 輸入的文字
-		Prompt: prompt,
+		Messages: []openai.ChatCompletionMessage{{
+			Role:    openai.ChatMessageRoleUser,
+			Content: prompt,
+		},
+		},
 	}
 
 	// 執行OpenAPI
-	res, err := client.CreateCompletion(context.TODO(), req)
+	res, err := client.CreateChatCompletion(context.TODO(), req)
 	if err != nil {
 		return "", err
 	}
 
 	// 取得OpenAI回傳內容，並去除不必要的空格及分行符號
-	result := strings.ReplaceAll(res.Choices[0].Text, "\n", "")
+	result := strings.ReplaceAll(res.Choices[0].Message.Content, "\n", "")
 	result = strings.ReplaceAll(result, " ", "")
 
 	return result, nil
